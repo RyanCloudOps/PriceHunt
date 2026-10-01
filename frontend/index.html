@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PriceHunt</title>
+    <meta name="description" content="Rastreador de ofertas de periféricos en tiendas seguras" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;800;900&family=JetBrains+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <canvas id="network" aria-hidden="true"></canvas>
+    <div class="grain" aria-hidden="true"></div>
+
+    <header class="nav">
+      <a class="brand" href="#top">
+        <span class="brand-mark"></span>PRICEHUNT
+      </a>
+      <nav>
+        <a href="#deals">Ofertas</a>
+        <a href="#stores">Tiendas</a>
+        <a href="#watch">Vigilancia</a>
+        <a href="#activity">Actividad</a>
+      </nav>
+      <div class="status-pill" id="status-pill">
+        <span class="dot"></span><span id="status-text">Conectando…</span>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow reveal">Rastreador interno · Corsair & periféricos</p>
+          <h1 class="hero-title">
+            <span class="line"><span>CAZAMOS OFERTAS</span></span>
+            <span class="line"><span>EN PERIFÉRICOS.</span></span>
+          </h1>
+          <p class="hero-sub reveal">
+            Amazon, LDLC, MediaMarkt y más tiendas seguras, revisadas cada día de forma automática.
+            Lo que se caza hoy se revalida mañana.
+          </p>
+          <div class="hero-actions reveal">
+            <a class="btn btn-dark" href="#deals">Ver ofertas</a>
+            <button class="btn btn-ghost" id="refresh-btn" type="button">
+              <span class="btn-spinner"></span><span class="label">Refrescar ahora</span>
+            </button>
+          </div>
+        </div>
+        <div class="scroll-hint" aria-hidden="true"><span></span></div>
+      </section>
+
+      <section class="stats" aria-label="Resumen">
+        <div class="stat reveal"><b data-count="active_deals">0</b><span>ofertas activas</span></div>
+        <div class="stat reveal"><b data-count="new_today">0</b><span>nuevas en 24 h</span></div>
+        <div class="stat reveal"><b data-count="best_discount" data-suffix="%">0</b><span>mejor descuento</span></div>
+        <div class="stat reveal"><b data-count="total_savings" data-suffix=" €">0</b><span>ahorro acumulado</span></div>
+      </section>
+
+      <section class="panel" id="stores">
+        <div class="section-head reveal">
+          <h2>Tiendas</h2>
+          <p>Accesos directos guardados en la base de datos. Las marcadas como <em>rastreadas</em> se escanean solas.</p>
+        </div>
+        <div class="stores" id="stores-list"></div>
+      </section>
+
+      <section class="panel" id="deals">
+        <div class="section-head reveal">
+          <h2>Ofertas</h2>
+          <p id="deals-count">Cargando…</p>
+        </div>
+
+        <div class="toolbar reveal">
+          <label class="search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+            <input id="f-q" type="search" placeholder="Buscar: K70, HS80, ratón…" autocomplete="off" />
+          </label>
+          <select id="f-store" aria-label="Tienda"><option value="">Todas las tiendas</option></select>
+          <select id="f-sort" aria-label="Orden">
+            <option value="discount">Mayor descuento</option>
+            <option value="newest">Más recientes</option>
+            <option value="price_asc">Precio ↑</option>
+            <option value="price_desc">Precio ↓</option>
+          </select>
+          <label class="range">
+            <span>Dto. mín. <b id="f-min-val">0%</b></span>
+            <input id="f-min" type="range" min="0" max="60" step="5" value="0" />
+          </label>
+        </div>
+        <div class="chips" id="f-cats"></div>
+
+        <div class="deals" id="deals-grid"></div>
+        <div class="empty" id="deals-empty" hidden>
+          <p>No hay ofertas que encajen. Prueba a quitar filtros o lanza un refresco.</p>
+        </div>
+      </section>
+
+      <section class="panel split" id="watch">
+        <div class="reveal">
+          <div class="section-head">
+            <h2>Vigilancia</h2>
+            <p>Marcas que se buscan en cada tienda rastreada.</p>
+          </div>
+          <div class="chips big" id="watch-list"></div>
+          <form class="inline-form" id="watch-form">
+            <input name="query" placeholder="Añadir marca (p. ej. glorious)" required minlength="2" maxlength="100" />
+            <button class="btn btn-dark" type="submit">Añadir</button>
+          </form>
+        </div>
+        <div class="reveal">
+          <div class="section-head">
+            <h2>Añadir web</h2>
+            <p>Guarda un acceso directo a otra tienda de confianza (solo https).</p>
+          </div>
+          <form class="stack-form" id="store-form">
+            <input name="name" placeholder="Nombre" required minlength="2" maxlength="100" />
+            <input name="shortcut_url" type="url" placeholder="https://…" required pattern="https://.*" />
+            <div class="row">
+              <input name="search_url" placeholder="Búsqueda (opcional): https://…?q={query}" />
+              <input name="accent_color" type="color" value="#f5a524" aria-label="Color" />
+            </div>
+            <button class="btn btn-dark" type="submit">Guardar acceso directo</button>
+            <p class="form-msg" id="store-msg" role="status"></p>
+          </form>
+        </div>
+      </section>
+
+      <section class="panel" id="activity">
+        <div class="section-head reveal">
+          <h2>Actividad</h2>
+          <p id="next-run">Programación del refresco diario…</p>
+        </div>
+        <ol class="timeline" id="runs"></ol>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>PriceHunt · proyecto interno</span>
+      <span>Precios orientativos: confirma siempre en la tienda.</span>
+    </footer>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
