@@ -1,26 +1,42 @@
 import re
 
-_CATEGORIES: list[tuple[str, re.Pattern[str]]] = [
-    ("Teclados", re.compile(r"teclado|keyboard", re.I)),
-    ("Ratones", re.compile(r"rat[oó]n|mouse", re.I)),
-    ("Auriculares", re.compile(r"auricular|headset|cascos", re.I)),
-    ("Alfombrillas", re.compile(r"alfombrilla|mouse ?pad", re.I)),
-    ("Streaming", re.compile(r"micr[oó]fono|webcam|stream ?deck|capturadora", re.I)),
+# El orden importa: gana la primera coincidencia (p. ej. "Portátil con teclado RGB" → Portátiles)
+_CATEGORIES: list[tuple[str, str]] = [
+    ("Portátiles", r"port[aá]til|laptop|notebook|chromebook"),
+    ("Tablets", r"\btablet|\bipad"),
+    ("Wearables", r"smartwatch|reloj|pulsera de actividad|galaxy watch|smartband"),
+    ("Smartphones", r"smartphone|m[oó]vil|iphone|\bgalaxy [asz]\d"),
+    ("Monitores", r"monitor"),
+    ("Televisores", r"\btv\b|televisor|smart tv|qled"),
+    ("Teclados", r"teclado|keyboard"),
+    ("Ratones", r"rat[oó]n|mouse"),
+    ("Auriculares", r"auricular|headset|cascos|earbuds|airpods|\bbuds"),
+    ("Audio", r"altavoz|barra de sonido|soundbar|speaker|equipo de m[uú]sica"),
+    ("Alfombrillas", r"alfombrilla|mouse ?pad"),
+    ("Streaming", r"micr[oó]fono|webcam|stream ?deck|capturadora"),
+    ("Fotografía", r"c[aá]mara|objetivo|gimbal|\bdron"),
+    ("Consolas y gaming", r"consola|volante|\bmando\b|gamepad|joystick|playstation|nintendo|xbox"),
+    ("Componentes", r"tarjeta gr[aá]fica|\b(rtx|gtx|rx) ?\d|placa base|procesador|\bcpu\b"),
+    ("Refrigeración", r"refrigeraci[oó]n|l[ií]quida|ventilador|\baio\b|\bfans?\b"),
+    ("Fuentes", r"fuente de alimentaci[oó]n|\bpsu\b|\b(rm|hx|cx|sf)\d{3,4}"),
+    ("Memoria", r"memoria|\bddr[45]\b|\bram\b"),
+    ("Almacenamiento", r"\bssd\b|nvme|disco|pendrive|tarjeta (de memoria|micro ?sd)"),
+    ("Cajas", r"\bcaja\b|torre|chasis|airflow|\b\d{4}[dx]\b"),
+    ("Sillas", r"\bsilla"),
+    ("Impresoras", r"impresora|multifunci[oó]n|esc[aá]ner"),
+    ("Redes", r"router|\bwi-?fi\b|\bmesh\b|repetidor|switch de red"),
     (
-        "Refrigeración",
-        re.compile(r"refrigeraci[oó]n|l[ií]quida|ventilador|\baio\b|\bfans?\b", re.I),
+        "Electrodomésticos",
+        r"lavadora|secadora|frigor[ií]fico|nevera|horno|microondas|lavavajillas|aspirador"
+        r"|placa (de )?inducci[oó]n|vitrocer[aá]mica|cafetera|freidora|aire acondicionado",
     ),
-    ("Fuentes", re.compile(r"fuente de alimentaci[oó]n|\bpsu\b|\b(rm|hx|cx|sf)\d{3,4}", re.I)),
-    ("Memoria", re.compile(r"memoria|\bddr[45]\b|\bram\b", re.I)),
-    ("Almacenamiento", re.compile(r"\bssd\b|nvme|disco", re.I)),
-    ("Cajas", re.compile(r"\bcaja\b|torre|chasis|airflow|\b\d{4}[dx]\b", re.I)),
-    ("Monitores", re.compile(r"monitor", re.I)),
-    ("Sillas", re.compile(r"\bsilla", re.I)),
+    ("Iluminación", r"l[aá]mpara|iluminaci[oó]n|tira led|bombilla|\blight\b"),
 ]
+_COMPILED = [(name, re.compile(pattern, re.I)) for name, pattern in _CATEGORIES]
 
 
 def categorize(title: str) -> str:
-    for name, pattern in _CATEGORIES:
+    for name, pattern in _COMPILED:
         if pattern.search(title):
             return name
     return "Otros"

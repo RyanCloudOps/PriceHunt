@@ -189,6 +189,16 @@ def test_demo_is_stable_within_a_day():
         ("Corsair 5000D RGB Airflow caja", "Cajas"),
         ("Corsair iCUE H150i Refrigeración líquida", "Refrigeración"),
         ("Corsair 5000D RGB Airflow (Blanco)", "Cajas"),
+        ("Lavadora carga frontal - Samsung WW90", "Electrodomésticos"),
+        ('TV Mini LED 65" - Samsung QN90', "Televisores"),
+        ("Tablet - Samsung Galaxy Tab S10", "Tablets"),
+        ("Samsung Galaxy A57, Azul, 256 GB", "Smartphones"),
+        ("Monitor gaming - Samsung Odyssey G5", "Monitores"),
+        ("Portátil gaming - ASUS con teclado RGB", "Portátiles"),
+        ("Volante - Logitech G G923", "Consolas y gaming"),
+        ("Ratón gaming Logitech G Pro LIGHTSPEED", "Ratones"),
+        ("Apple AirPods 4 (2024 4ª gen), Inalámbricos", "Auriculares"),
+        ("Samsung Galaxy Buds3 Pro", "Auriculares"),
         ("Algo raro", "Otros"),
     ],
 )
@@ -202,12 +212,16 @@ def test_matches_brand():
 
 
 @respx.mock
-def test_mediamarkt_retries_when_brand_redirects():
+def test_mediamarkt_quotes_brand_and_paginates():
     route = respx.get(url__startswith="https://www.mediamarkt.es/es/search.html")
     route.side_effect = [
-        httpx.Response(200, text="<html>landing</html>" * 500),
         httpx.Response(200, text=MM_HTML),
+        httpx.Response(200, text=MM_HTML),  # página repetida: no aporta nada nuevo → se para
+        httpx.Response(200, text="no debería pedirse"),
     ]
-    items = MediaMarktScraper(Settings(scrape_delay_seconds=0)).search("corsair")
+    items = MediaMarktScraper(Settings(scrape_delay_seconds=0, max_pages=3)).search("samsung")
     assert len(items) == 2
-    assert route.calls[1].request.url.params["query"] == "corsair gaming"
+    assert route.call_count == 2
+    first, second = (c.request.url.params for c in route.calls)
+    assert first["query"] == '"samsung"' and "page" not in first
+    assert second["page"] == "2"

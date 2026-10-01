@@ -1,6 +1,6 @@
 # PriceHunt
 
-Web que **busca ofertas de periféricos** (Corsair, Logitech, Razer, SteelSeries, HyperX…) en tiendas conocidas, las guarda en una base de datos y **las revisa sola cada día**. Si una oferta desaparece o ya no tiene descuento, deja de mostrarse.
+Web que **busca todas las ofertas de las marcas que tú elijas** (Corsair, Apple, Samsung, Logitech…: tecnología, hogar, gaming, lo que haya) en tiendas conocidas, las guarda en una base de datos y **las revisa sola cada día**. Si una oferta desaparece o ya no tiene descuento, deja de mostrarse.
 
 Es un proyecto interno: se ejecuta en local con Docker.
 
@@ -10,7 +10,7 @@ Es un proyecto interno: se ejecuta en local con Docker.
 - **Las guarda** en PostgreSQL junto con el historial de precios de cada producto.
 - **Las actualiza sola**: al arrancar (si los datos tienen más de 24 h), todos los días a las 07:00 y cuando pulsas *Refrescar ahora*.
 - **Guarda accesos directos** a otras tiendas de confianza (PcComponentes, Coolmod, Alternate, Corsair…). Puedes añadir más desde la web.
-- **Te deja elegir qué marcas vigilar**, también desde la web.
+- **Te deja elegir qué marcas vigilar** desde la web. De cada marca se busca todo tipo de producto, y se clasifica solo (móviles, TVs, portátiles, electrodomésticos, teclados…).
 - **Muestra todo en una web animada** con una esfera de red 3D, filtros por tienda, categoría y descuento, y un registro de cada búsqueda.
 
 ## Cómo arrancarlo
@@ -79,6 +79,7 @@ Las opciones están en `.env.example`. Las más útiles:
 | `REFRESH_CRON_HOUR` | `7` | Hora del refresco diario |
 | `REFRESH_INTERVAL_HOURS` | `24` | A partir de cuántas horas se consideran viejos los datos |
 | `MIN_DISCOUNT_PCT` | `5` | Descuento mínimo para contar como oferta |
+| `MAX_PAGES` | `3` | Páginas de resultados por marca y tienda |
 
 ## Estructura
 

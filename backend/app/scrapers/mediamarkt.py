@@ -18,12 +18,23 @@ class MediaMarktScraper(Scraper):
     base = "https://www.mediamarkt.es"
 
     def search(self, query: str) -> list[ScrapedItem]:
-        items = self.parse(self.fetch(f"{self.base}/es/search.html", params={"query": query}))
-        if not items:
-            # Una marca exacta redirige a su landing (/es/brand/x) sin listado de productos
-            items = self.parse(
-                self.fetch(f"{self.base}/es/search.html", params={"query": f"{query} gaming"})
-            )
+        # Entre comillas: una marca exacta sin comillas redirige a su landing (/es/brand/x),
+        # que no tiene listado. Así se obtienen productos de todas las categorías.
+        items: list[ScrapedItem] = []
+        seen: set[str] = set()
+        for page in range(1, self.settings.max_pages + 1):
+            params: dict[str, str | int] = {"query": f'"{query}"'}
+            if page > 1:
+                params["page"] = page
+            batch = [
+                i
+                for i in self.parse(self.fetch(f"{self.base}/es/search.html", params=params))
+                if i.external_id not in seen
+            ]
+            if not batch:
+                break
+            seen.update(i.external_id for i in batch)
+            items.extend(batch)
         return items
 
     @classmethod

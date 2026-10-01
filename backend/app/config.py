@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     # Scraping
     demo_mode: bool = False  # datos sintéticos, sin tocar webs reales (CI / offline)
     min_discount_pct: float = 5.0
+    max_pages: int = 3  # páginas de resultados por marca y tienda
     scrape_delay_seconds: float = 2.0
     http_timeout_seconds: float = 20.0
     user_agent: str = (
