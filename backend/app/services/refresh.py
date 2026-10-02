@@ -75,7 +75,7 @@ def upsert_deal(session: Session, store: Store, brand: str, item: ScrapedItem) -
     deal.url = item.url
     deal.image_url = item.image_url
     deal.brand = brand
-    deal.category = categorize(item.title)
+    deal.category = categorize(item.title, item.description)
     deal.price = item.price
     deal.original_price = item.original_price
     deal.discount_pct = item.discount_pct

@@ -9,6 +9,7 @@ from app.scrapers.base import ScrapedItem, Scraper, parse_price
 
 _AMOUNT_RE = re.compile(r"\d{1,3}(?:\.\d{3})*,\d{2}\s*€")
 _ID_RE = re.compile(r"-(\d+)\.html")
+_PAGE_COUNT_RE = re.compile(r'"pageCount":(\d+)')
 
 
 class MediaMarktScraper(Scraper):
@@ -20,21 +21,29 @@ class MediaMarktScraper(Scraper):
     def search(self, query: str) -> list[ScrapedItem]:
         # Entre comillas: una marca exacta sin comillas redirige a su landing (/es/brand/x),
         # que no tiene listado. Así se obtienen productos de todas las categorías.
+        # El filtro de marca descarta fundas y accesorios "compatibles con" (Apple pasa de
+        # ~35.000 resultados a ~4.000); si la tienda no reconoce la marca, se busca sin él.
+        items = self._search_pages({"query": f'"{query}"', "brand": query.upper()})
+        return items or self._search_pages({"query": f'"{query}"'})
+
+    def _search_pages(self, base_params: dict[str, str]) -> list[ScrapedItem]:
         items: list[ScrapedItem] = []
         seen: set[str] = set()
+        page_count = self.settings.max_pages
         for page in range(1, self.settings.max_pages + 1):
-            params: dict[str, str | int] = {"query": f'"{query}"'}
+            params: dict[str, str | int] = dict(base_params)
             if page > 1:
                 params["page"] = page
-            batch = [
-                i
-                for i in self.parse(self.fetch(f"{self.base}/es/search.html", params=params))
-                if i.external_id not in seen
-            ]
+            html = self.fetch(f"{self.base}/es/search.html", params=params)
+            if page == 1 and (m := _PAGE_COUNT_RE.search(html)):
+                page_count = min(int(m.group(1)), self.settings.max_pages)
+            batch = [i for i in self.parse(html) if i.external_id not in seen]
             if not batch:
                 break
             seen.update(i.external_id for i in batch)
             items.extend(batch)
+            if page >= page_count:
+                break
         return items
 
     @classmethod

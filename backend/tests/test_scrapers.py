@@ -42,6 +42,7 @@ LDLC_HTML = """
 </li>
 <li class="pdt-item" data-id="AR2">
   <h3 class="title-3"><a href="/es-es/ficha/PB2.html">Corsair RM850e</a></h3>
+  <p class="desc">Fuente de alimentación modular ATX 850W</p>
   <div class="price">121€<sup>95</sup></div>
 </li>
 <li class="pdt-item"><h3 class="title-3"><a href="/x">Sin id</a></h3></li>
@@ -59,6 +60,8 @@ def test_ldlc_parse():
     assert deal.original_price == Decimal("183.95")
     assert deal.discount_pct == pytest.approx(45.7, abs=0.1)
     assert normal.original_price is None and normal.discount_pct == 0
+    assert deal.description is None
+    assert normal.description == "Fuente de alimentación modular ATX 850W"
 
 
 MM_HTML = """
@@ -188,6 +191,9 @@ def test_demo_is_stable_within_a_day():
         ("Corsair Vengeance DDR5 32GB", "Memoria"),
         ("Corsair 5000D RGB Airflow caja", "Cajas"),
         ("Corsair iCUE H150i Refrigeración líquida", "Refrigeración"),
+        ("Refrigerador CPU - CORSAIR CW-9060078-WW", "Refrigeración"),
+        ("Refrigerador del chasis - CORSAIR iCUE LINK QX120 RGB", "Refrigeración"),
+        ("Tarjeta gráfica - MSI GeForce RTX 5070", "Componentes"),
         ("Corsair 5000D RGB Airflow (Blanco)", "Cajas"),
         ("Lavadora carga frontal - Samsung WW90", "Electrodomésticos"),
         ('TV Mini LED 65" - Samsung QN90', "Televisores"),
@@ -199,11 +205,40 @@ def test_demo_is_stable_within_a_day():
         ("Ratón gaming Logitech G Pro LIGHTSPEED", "Ratones"),
         ("Apple AirPods 4 (2024 4ª gen), Inalámbricos", "Auriculares"),
         ("Samsung Galaxy Buds3 Pro", "Auriculares"),
+        ("Apple MacBook Air 13 M4", "Portátiles"),
+        ("Apple Mac mini M4", "Ordenadores"),
+        ("Apple Watch Series 11 GPS 46 mm", "Wearables"),
+        ("Corsair Platform:6 Escritorio elevable", "Escritorios"),
+        ("Lámpara de escritorio LED", "Iluminación"),
         ("Algo raro", "Otros"),
     ],
 )
 def test_categorize(title, category):
     assert categorize(title) == category
+
+
+@pytest.mark.parametrize(
+    ("title", "description", "category"),
+    [
+        # El título manda; la descripción solo cuenta si el título no dice nada
+        ("Corsair K70 RGB Teclado", "Compatible con móvil", "Teclados"),
+        (
+            "Corsair VOID Max (Negro)",
+            "Auriculares para juegos - compatible con móvil",
+            "Auriculares",
+        ),
+        (
+            "Corsair EX300U 1 TB",
+            "SSD externo USB 3.1 Tipo C ultraportátil de 1 TB",
+            "Almacenamiento",
+        ),
+        ("Corsair MM Cloth L", "Alfombrilla de ratón de tela", "Alfombrillas"),
+        ("Corsair XL5 Coolant 1L", "Líquido refrigerante - 1000 mL", "Refrigeración"),
+        ("Corsair Warthog", None, "Otros"),
+    ],
+)
+def test_categorize_with_description(title, description, category):
+    assert categorize(title, description) == category
 
 
 def test_matches_brand():
@@ -223,5 +258,40 @@ def test_mediamarkt_quotes_brand_and_paginates():
     assert len(items) == 2
     assert route.call_count == 2
     first, second = (c.request.url.params for c in route.calls)
-    assert first["query"] == '"samsung"' and "page" not in first
-    assert second["page"] == "2"
+    assert first["query"] == '"samsung"' and first["brand"] == "SAMSUNG" and "page" not in first
+    assert second["page"] == "2" and second["brand"] == "SAMSUNG"
+
+
+@respx.mock
+def test_mediamarkt_falls_back_without_brand_filter():
+    route = respx.get(url__startswith="https://www.mediamarkt.es/es/search.html")
+    route.side_effect = [
+        httpx.Response(200, text="<html>0 resultados</html>" + "x" * 5000),  # marca no reconocida
+        httpx.Response(200, text=MM_HTML + '"pageCount":1'),
+    ]
+    items = MediaMarktScraper(Settings(scrape_delay_seconds=0)).search("hyperx")
+    assert len(items) == 2
+    with_brand, without = (c.request.url.params for c in route.calls)
+    assert with_brand["brand"] == "HYPERX" and "brand" not in without
+
+
+@respx.mock
+def test_mediamarkt_stops_at_page_count():
+    route = respx.get(url__startswith="https://www.mediamarkt.es/es/search.html")
+    route.side_effect = [httpx.Response(200, text=MM_HTML + '"pageCount":1')]
+    MediaMarktScraper(Settings(scrape_delay_seconds=0, max_pages=60)).search("corsair")
+    assert route.call_count == 1
+
+
+@respx.mock
+def test_ldlc_paginates_until_last_page():
+    page2 = LDLC_HTML.replace("AR1", "AR3").replace("AR2", "AR4")
+    respx.get("https://www.ldlc.com/es-es/buscar/corsair/").mock(
+        return_value=httpx.Response(200, text=LDLC_HTML + '<a href="/es-es/buscar/corsair/page2/">')
+    )
+    p2 = respx.get("https://www.ldlc.com/es-es/buscar/corsair/page2/").mock(
+        return_value=httpx.Response(200, text=page2)  # sin enlace a page3 → última página
+    )
+    items = LdlcScraper(Settings(scrape_delay_seconds=0)).search("corsair")
+    assert [i.external_id for i in items] == ["AR1", "AR2", "AR3", "AR4"]
+    assert p2.call_count == 1

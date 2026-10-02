@@ -42,6 +42,7 @@ class ScrapedItem:
     original_price: Decimal | None = None
     image_url: str | None = None
     currency: str = "EUR"
+    description: str | None = None  # solo para clasificar cuando el título es solo el modelo
 
     @property
     def discount_pct(self) -> float:

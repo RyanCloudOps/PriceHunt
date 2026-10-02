@@ -10,8 +10,21 @@ class LdlcScraper(Scraper):
     base = "https://www.ldlc.com"
 
     def search(self, query: str) -> list[ScrapedItem]:
-        html = self.fetch(f"{self.base}/es-es/buscar/{quote(query)}/")
-        return self.parse(html)
+        # 48 productos por página; las ofertas (con precio tachado) suelen estar repartidas
+        # por todo el listado, no en la primera página.
+        items: list[ScrapedItem] = []
+        seen: set[str] = set()
+        for page in range(1, self.settings.max_pages + 1):
+            suffix = f"page{page}/" if page > 1 else ""
+            html = self.fetch(f"{self.base}/es-es/buscar/{quote(query)}/{suffix}")
+            batch = [i for i in self.parse(html) if i.external_id not in seen]
+            if not batch:
+                break
+            seen.update(i.external_id for i in batch)
+            items.extend(batch)
+            if f"/page{page + 1}/" not in html:
+                break
+        return items
 
     @classmethod
     def parse(cls, html: str) -> list[ScrapedItem]:
@@ -28,6 +41,7 @@ class LdlcScraper(Scraper):
                 continue
             old_el = li.select_one(".old-price")
             img = li.select_one(".pic img")
+            desc = li.select_one(".desc")
             items.append(
                 ScrapedItem(
                     external_id=str(pid),
@@ -36,6 +50,7 @@ class LdlcScraper(Scraper):
                     price=price,
                     original_price=parse_price(old_el.get_text("")) if old_el else None,
                     image_url=img.get("src") if img else None,
+                    description=desc.get_text(" ", strip=True) if desc else None,
                 )
             )
         return items

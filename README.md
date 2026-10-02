@@ -79,7 +79,7 @@ Las opciones están en `.env.example`. Las más útiles:
 | `REFRESH_CRON_HOUR` | `7` | Hora del refresco diario |
 | `REFRESH_INTERVAL_HOURS` | `24` | A partir de cuántas horas se consideran viejos los datos |
 | `MIN_DISCOUNT_PCT` | `5` | Descuento mínimo para contar como oferta |
-| `MAX_PAGES` | `3` | Páginas de resultados por marca y tienda |
+| `MAX_PAGES` | `60` | Tope de páginas de resultados por marca y tienda |
 
 ## Estructura
 
