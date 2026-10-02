@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Gestión local de PriceHunt en Windows.
 .EXAMPLE
@@ -16,15 +16,20 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
-function Assert-Docker {
+function Test-Docker {
+    # En PowerShell 5.1, con "Stop" el stderr de un comando nativo lanza una excepción
+    $ErrorActionPreference = "Continue"
     docker info --format '{{.ServerVersion}}' *> $null
-    if ($LASTEXITCODE -ne 0) {
+    return $LASTEXITCODE -eq 0
+}
+
+function Assert-Docker {
+    if (-not (Test-Docker)) {
         Write-Host "Docker no responde. Arrancando Docker Desktop..." -ForegroundColor Yellow
         Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe"
         for ($i = 0; $i -lt 60; $i++) {
             Start-Sleep 3
-            docker info --format '{{.ServerVersion}}' *> $null
-            if ($LASTEXITCODE -eq 0) { return }
+            if (Test-Docker) { return }
         }
         throw "Docker no arrancó a tiempo"
     }
