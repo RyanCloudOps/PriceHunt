@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -7,7 +8,9 @@ import respx
 
 from app.config import Settings
 from app.scrapers import BlockedError, build_scraper, parse_price
+from app.scrapers.alternate import AlternateScraper
 from app.scrapers.amazon import AmazonPaapiScraper, sigv4_headers
+from app.scrapers.corsair import CATEGORIES, CorsairScraper
 from app.scrapers.demo import DemoScraper
 from app.scrapers.ldlc import LdlcScraper
 from app.scrapers.mediamarkt import MediaMarktScraper
@@ -172,6 +175,8 @@ def test_build_scraper_rules(db):
     assert build_scraper(stores["pccomponentes"], settings) is None  # solo acceso directo
     assert build_scraper(stores["amazon"], settings) is None  # sin credenciales PA-API
     assert isinstance(build_scraper(stores["ldlc"], settings), LdlcScraper)
+    assert isinstance(build_scraper(stores["alternate"], settings), AlternateScraper)
+    assert isinstance(build_scraper(stores["corsair"], settings), CorsairScraper)
     assert isinstance(build_scraper(stores["amazon"], Settings(demo_mode=True)), DemoScraper)
 
 
@@ -295,3 +300,132 @@ def test_ldlc_paginates_until_last_page():
     items = LdlcScraper(Settings(scrape_delay_seconds=0)).search("corsair")
     assert [i.external_id for i in items] == ["AR1", "AR2", "AR3", "AR4"]
     assert p2.call_count == 1
+
+
+def _alternate_box(pid: str, name: str, price: str, old: str = "", delivery: str = "En stock"):
+    old_html = f'<div><span class="line-through">{old}</span></div>' if old else ""
+    return f"""
+<a class="card productBox" href="https://www.alternate.es/Corsair/Item/html/product/{pid}">
+  <img class="productPicture" src="/p/200x200/1/9/{pid}.jpg">
+  <div class="product-name font-weight-bold"><span>Corsair</span> {name}</div>
+  <span class="product-name-sub">negro</span>
+  <ul class="product-bullet-list"><li>Escritorio gaming</li></ul>
+  <div class="campaign-timer-price-section">{old_html}<span class="price">{price}</span>
+  <div class="delivery-info"><span>{delivery}</span></div></div>
+</a>"""
+
+
+ALTERNATE_HTML = (
+    _alternate_box("100001", "Platform:6", "€ 299,00", old="€ 399,00")
+    + _alternate_box("100002", "K70", "€ 81,90")
+    + _alternate_box("100003", "Agotado", "€ 10,00", delivery="El artículo no puede ser comprado")
+)
+
+
+def test_alternate_parse():
+    deal, normal = AlternateScraper.parse(ALTERNATE_HTML)
+    assert deal.external_id == "100001"
+    assert deal.title == "Corsair Platform:6 negro"
+    assert deal.price == Decimal("299.00") and deal.original_price == Decimal("399.00")
+    assert deal.image_url == "https://www.alternate.es/p/200x200/1/9/100001.jpg"
+    assert normal.original_price is None  # el producto sin stock se descarta
+
+
+@respx.mock
+def test_alternate_paginates_until_a_page_adds_nothing_new():
+    page2 = ALTERNATE_HTML.replace("100001", "100004").replace("100002", "100005")
+    route = respx.get(url__startswith="https://www.alternate.es/listing.xhtml")
+    route.side_effect = [
+        httpx.Response(200, text=ALTERNATE_HTML),
+        httpx.Response(200, text=page2),
+        httpx.Response(200, text=page2),  # repetida → fin
+    ]
+    items = AlternateScraper(Settings(scrape_delay_seconds=0)).search("corsair")
+    assert [i.external_id for i in items] == ["100001", "100002", "100004", "100005"]
+    assert [c.request.url.params.get("page") for c in route.calls] == [None, "2", "3"]
+
+
+def _corsair_page(*products: dict, links: str = "") -> str:
+    data = {
+        "props": {"pageProps": {"data": {"products": {"page_info": {}, "items": list(products)}}}}
+    }
+    return f'{links}<script id="__NEXT_DATA__" type="application/json">{json.dumps(data)}</script>'
+
+
+def _corsair_product(sku, name, final, regular=None, stock="IN_STOCK", cats=()):
+    price = {"final_price": {"value": final}, "regular_price": {"value": regular or final}}
+    return {
+        "sku": sku,
+        "name": name,
+        "stock_status": stock,
+        "price_range": {"minimum_price": price},
+        "image": {"url": "https://assets.corsair.com/image/upload/c_scale%2Cq_auto%2Cw_96/x.png"},
+        "categories": [{"name": c} for c in cats],
+        "description": {"html": "<p>Texto</p>"},
+    }
+
+
+CORSAIR_PAGE = _corsair_page(
+    _corsair_product("CF-9500006-WW", "Escritorio Platform:6", 229.9, 299.9),
+    _corsair_product("CF-9010074-WW", "Embrace", 499.99, cats=("Sillas gaming",)),
+    _corsair_product("CH-1", "Corsair K70", 99, stock="OUT_OF_STOCK"),
+    links='<a href="/es/es/p/gaming-furniture/cf-9500006-ww/platform-6-desk-cf-9500006-ww?position=1">',
+)
+
+
+def test_corsair_parse():
+    desk, chair = CorsairScraper.parse(CORSAIR_PAGE)  # el producto sin stock se descarta
+    assert desk.title == "Corsair Escritorio Platform:6"
+    assert desk.price == Decimal("229.90") and desk.original_price == Decimal("299.90")
+    assert desk.url == (
+        "https://www.corsair.com/es/es/p/gaming-furniture/cf-9500006-ww/platform-6-desk-cf-9500006-ww"
+    )
+    assert (
+        desk.image_url == "https://assets.corsair.com/image/upload/c_scale%2Cq_auto%2Cw_400/x.png"
+    )
+    assert categorize(desk.title, desk.description) == "Escritorios"
+    # Sin enlace en el HTML cae a la búsqueda por SKU; "Embrace" se clasifica por su categoría
+    assert chair.url.endswith("/es/es/search?q=CF-9010074-WW")
+    assert categorize(chair.title, chair.description) == "Sillas"
+
+
+def test_corsair_parse_without_next_data():
+    assert CorsairScraper.parse("<html>nada</html>") == []
+
+
+@respx.mock
+def test_corsair_scrapes_categories_and_ignores_other_brands():
+    route = respx.get(url__startswith="https://www.corsair.com/es/es/c/")
+    route.mock(return_value=httpx.Response(200, text=CORSAIR_PAGE))
+    scraper = CorsairScraper(Settings(scrape_delay_seconds=0))
+    assert scraper.search("logitech") == []
+    assert route.call_count == 0
+    items = scraper.search("corsair")
+    assert len(items) == 2  # misma ficha en todas las categorías: sin duplicados
+    assert route.call_count == len(CATEGORIES)
+
+
+@respx.mock
+def test_corsair_survives_one_missing_category_but_not_a_block():
+    route = respx.get(url__startswith="https://www.corsair.com/es/es/c/")
+    route.side_effect = [httpx.Response(404)] + [httpx.Response(200, text=CORSAIR_PAGE)] * 20
+    assert len(CorsairScraper(Settings(scrape_delay_seconds=0)).search("corsair")) == 2
+    route.side_effect = [httpx.Response(403)]
+    with pytest.raises(BlockedError):
+        CorsairScraper(Settings(scrape_delay_seconds=0)).search("corsair")
+
+
+def test_seed_enables_scrapers_on_existing_stores(db):
+    from sqlalchemy import select
+
+    from app.models import Store
+    from app.services.seed import seed_defaults
+
+    for slug in ("alternate", "corsair"):
+        store = db.scalar(select(Store).where(Store.slug == slug))
+        store.scraper, store.search_url = None, None
+    db.commit()
+    seed_defaults(db)
+    stores = {s.slug: s for s in db.scalars(select(Store))}
+    assert stores["alternate"].scraper == "alternate"
+    assert stores["corsair"].scraper == "corsair" and "{query}" in stores["corsair"].search_url

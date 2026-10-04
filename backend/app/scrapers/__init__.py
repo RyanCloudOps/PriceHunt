@@ -1,13 +1,22 @@
 from app.config import Settings
 from app.models import Store
+from app.scrapers.alternate import AlternateScraper
 from app.scrapers.amazon import AmazonPaapiScraper
 from app.scrapers.base import BlockedError, ScrapedItem, Scraper, ScraperError, parse_price
+from app.scrapers.corsair import CorsairScraper
 from app.scrapers.demo import DemoScraper
 from app.scrapers.ldlc import LdlcScraper
 from app.scrapers.mediamarkt import MediaMarktScraper
 
 REGISTRY: dict[str, type[Scraper]] = {
-    cls.key: cls for cls in (AmazonPaapiScraper, LdlcScraper, MediaMarktScraper)
+    cls.key: cls
+    for cls in (
+        AlternateScraper,
+        AmazonPaapiScraper,
+        CorsairScraper,
+        LdlcScraper,
+        MediaMarktScraper,
+    )
 }
 
 

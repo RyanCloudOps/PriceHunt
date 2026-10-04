@@ -26,6 +26,12 @@ CATALOG: dict[str, list[tuple[str, int]]] = {
         ("Corsair RM850e Fuente de alimentación 80 Plus Gold", 129),
         ("Corsair Vengeance RGB DDR5 32GB 6000MHz Memoria", 139),
         ("Corsair 4000D Airflow Caja torre ATX", 109),
+        ("Corsair Platform:6 Escritorio gaming con bastidores", 299),
+        ("Corsair Platform:4 Escritorio gaming regulable", 249),
+        ("Corsair Platform:6 Extensión de escritorio madera", 79),
+        ("Corsair Multi Frame Panel perforado para escritorio", 49),
+        ("Corsair TC100 RELAXED Silla gaming tela", 249),
+        ("Corsair TC500 Silla gaming ergonómica", 599),
     ],
     "logitech": [
         ("Logitech G PRO X SUPERLIGHT 2 Ratón gaming", 169),

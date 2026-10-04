@@ -136,7 +136,7 @@ def test_demo_mode_end_to_end(db):
     run_id = run_refresh("manual", settings=Settings(demo_mode=True, scrape_delay_seconds=0))
     run = db.get(ScrapeRun, run_id)
     assert run.status == "success"
-    assert run.stores_ok == 3  # amazon, ldlc, mediamarkt
+    assert run.stores_ok == 5  # amazon, ldlc, mediamarkt, alternate, corsair
     assert run.deals_found > 0
 
 

@@ -56,16 +56,16 @@ DEFAULT_STORES = [
         "shortcut_url": "https://www.alternate.es/",
         "search_url": "https://www.alternate.es/listing.xhtml?q={query}",
         "accent_color": "#d4002a",
-        "scraper": None,
+        "scraper": "alternate",
     },
     {
         "slug": "corsair",
         "name": "Corsair Store",
         "base_url": "https://www.corsair.com/es/es/",
         "shortcut_url": "https://www.corsair.com/es/es/",
-        "search_url": None,
+        "search_url": "https://www.corsair.com/es/es/search?q={query}",
         "accent_color": "#ece81a",
-        "scraper": None,
+        "scraper": "corsair",
     },
 ]
 
@@ -76,6 +76,20 @@ def seed_defaults(session: Session) -> None:
     """Idempotente: solo inserta si las tablas están vacías."""
     if not session.scalar(select(func.count()).select_from(Store)):
         session.add_all(Store(**data) for data in DEFAULT_STORES)
+    else:
+        _enable_new_scrapers(session)
     if not session.scalar(select(func.count()).select_from(WatchTerm)):
         session.add_all(WatchTerm(query=q) for q in DEFAULT_TERMS)
     session.commit()
+
+
+def _enable_new_scrapers(session: Session) -> None:
+    """Bases de datos anteriores: las tiendas que eran solo acceso directo y ahora tienen
+    scraper lo reciben. Solo se toca `scraper`/`search_url` si estaban vacíos."""
+    existing = {s.slug: s for s in session.scalars(select(Store))}
+    for data in DEFAULT_STORES:
+        store = existing.get(data["slug"])
+        if store is None or store.scraper or not data["scraper"]:
+            continue
+        store.scraper = data["scraper"]
+        store.search_url = store.search_url or data["search_url"]
