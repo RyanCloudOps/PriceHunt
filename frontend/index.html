@@ -21,6 +21,11 @@
       <a class="brand" href="#top">
         <span class="brand-mark"></span>PRICEHUNT
       </a>
+      <div class="mode" id="mode" role="group" aria-label="Tipo de ofertas" data-mode="tech">
+        <span class="mode-thumb" aria-hidden="true"></span>
+        <button type="button" data-mode="tech" aria-pressed="true">Tecnología</button>
+        <button type="button" data-mode="cars" aria-pressed="false">Coches</button>
+      </div>
       <nav>
         <a href="#deals">Ofertas</a>
         <a href="#stores">Tiendas</a>
@@ -35,12 +40,12 @@
     <main id="top">
       <section class="hero">
         <div class="hero-copy">
-          <p class="eyebrow reveal">Rastreador interno · Todas las ofertas de tus marcas</p>
+          <p class="eyebrow reveal" data-copy="eyebrow">Rastreador interno · Todas las ofertas de tus marcas</p>
           <h1 class="hero-title">
-            <span class="line"><span>CAZAMOS OFERTAS</span></span>
-            <span class="line"><span>DE TUS MARCAS.</span></span>
+            <span class="line"><span data-copy="title1">CAZAMOS OFERTAS</span></span>
+            <span class="line"><span data-copy="title2">DE TUS MARCAS.</span></span>
           </h1>
-          <p class="hero-sub reveal">
+          <p class="hero-sub reveal" data-copy="sub">
             Tú eliges las marcas y PriceHunt busca todas sus ofertas (tecnología, hogar, gaming…)
             en Amazon, LDLC, MediaMarkt y más tiendas seguras, cada día y de forma automática.
           </p>
@@ -78,7 +83,7 @@
         <div class="toolbar reveal">
           <label class="search">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-            <input id="f-q" type="search" placeholder="Buscar producto o modelo…" autocomplete="off" />
+            <input id="f-q" type="search" data-copy="search" data-copy-attr="placeholder" placeholder="Buscar producto o modelo…" autocomplete="off" />
           </label>
           <select id="f-store" aria-label="Tienda"><option value="">Todas las tiendas</option></select>
           <select id="f-sort" aria-label="Orden">
@@ -104,11 +109,11 @@
         <div class="reveal">
           <div class="section-head">
             <h2>Vigilancia</h2>
-            <p>Marcas que se buscan en cada tienda rastreada.</p>
+            <p data-copy="watchSub">Marcas que se buscan en cada tienda rastreada.</p>
           </div>
           <div class="chips big" id="watch-list"></div>
           <form class="inline-form" id="watch-form">
-            <input name="query" placeholder="Añadir marca (p. ej. glorious)" required minlength="2" maxlength="100" />
+            <input name="query" data-copy="watchPlaceholder" data-copy-attr="placeholder" placeholder="Añadir marca (p. ej. glorious)" required minlength="2" maxlength="100" />
             <button class="btn btn-dark" type="submit">Añadir</button>
           </form>
         </div>

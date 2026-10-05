@@ -1,3 +1,9 @@
+let vertical = "tech";
+
+export const setVertical = (v) => {
+  vertical = v;
+};
+
 async function request(path, options = {}) {
   const resp = await fetch(`/api${path}`, {
     headers: { "Content-Type": "application/json" },
@@ -17,18 +23,22 @@ async function request(path, options = {}) {
 }
 
 const qs = (params) =>
-  new URLSearchParams(Object.entries(params).filter(([, v]) => v !== "" && v != null)).toString();
+  new URLSearchParams(
+    Object.entries({ vertical, ...params }).filter(([, v]) => v !== "" && v != null),
+  ).toString();
 
 export const api = {
-  stats: () => request("/stats"),
+  stats: () => request(`/stats?${qs({})}`),
   deals: (params) => request(`/deals?${qs(params)}`),
   history: (id) => request(`/deals/${id}/history`),
-  categories: () => request("/categories"),
-  stores: () => request("/stores"),
-  addStore: (body) => request("/stores", { method: "POST", body: JSON.stringify(body) }),
+  categories: () => request(`/categories?${qs({})}`),
+  stores: () => request(`/stores?${qs({})}`),
+  addStore: (body) =>
+    request("/stores", { method: "POST", body: JSON.stringify({ ...body, vertical }) }),
   deleteStore: (id) => request(`/stores/${id}`, { method: "DELETE" }),
-  watchlist: () => request("/watchlist"),
-  addTerm: (query) => request("/watchlist", { method: "POST", body: JSON.stringify({ query }) }),
+  watchlist: () => request(`/watchlist?${qs({})}`),
+  addTerm: (query) =>
+    request("/watchlist", { method: "POST", body: JSON.stringify({ query, vertical }) }),
   deleteTerm: (id) => request(`/watchlist/${id}`, { method: "DELETE" }),
   runs: () => request("/runs?limit=8"),
   refresh: () => request("/refresh", { method: "POST" }),

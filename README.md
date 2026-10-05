@@ -79,6 +79,8 @@ Las opciones están en `.env.example`. Las más útiles:
 | `REFRESH_CRON_HOUR` | `7` | Hora del refresco diario |
 | `REFRESH_INTERVAL_HOURS` | `24` | A partir de cuántas horas se consideran viejos los datos |
 | `MIN_DISCOUNT_PCT` | `5` | Descuento mínimo para contar como oferta |
+| `CAR_MAX_PRICE` | `10000` | Modo coches: precio máximo (€) de los coches de ocasión que se muestran aunque no estén rebajados |
+| `CAR_MAX_KM` | `150000` | Modo coches: kilometraje máximo de los coches de ocasión («medio uso»); `0` = sin límite |
 | `MAX_PAGES` | `60` | Tope de páginas de resultados por marca y tienda |
 
 ## Estructura

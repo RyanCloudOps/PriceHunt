@@ -59,6 +59,12 @@ def fail_orphan_runs(session: Session) -> None:
     session.commit()
 
 
+def _discount_pct(price, original) -> float:
+    if not original or original <= price:
+        return 0.0
+    return round(float((1 - price / original) * 100), 1)
+
+
 def upsert_deal(session: Session, store: Store, brand: str, item: ScrapedItem) -> Deal:
     now = utcnow()
     deal = session.scalar(
@@ -71,14 +77,25 @@ def upsert_deal(session: Session, store: Store, brand: str, item: ScrapedItem) -
     else:
         price_changed = deal.price != item.price
 
+    original = item.original_price
+    if original is None and item.curated and deal.id is not None:
+        # La tienda marca el coche como rebajado pero no da el precio anterior:
+        # el más alto que hemos visto es la referencia.
+        top = session.scalar(
+            select(func.max(PriceHistory.price)).where(PriceHistory.deal_id == deal.id)
+        )
+        if top is not None and top > item.price:
+            original = top
+    discount_pct = _discount_pct(item.price, original)
+
     deal.title = item.title[:500]
     deal.url = item.url
     deal.image_url = item.image_url
     deal.brand = brand
-    deal.category = categorize(item.title, item.description)
+    deal.category = item.category or categorize(item.title, item.description)
     deal.price = item.price
-    deal.original_price = item.original_price
-    deal.discount_pct = item.discount_pct
+    deal.original_price = original
+    deal.discount_pct = discount_pct
     deal.currency = item.currency
     deal.is_active = True
     deal.last_seen_at = now
@@ -107,7 +124,7 @@ def _scrape_store(
         for item in items:
             if not matches_brand(item.title, term):
                 continue
-            if item.discount_pct < settings.min_discount_pct:
+            if not item.curated and item.discount_pct < settings.min_discount_pct:
                 continue
             seen.add(upsert_deal(session, store, term, item).id)
 
@@ -170,9 +187,7 @@ def run_refresh(
             stores = session.scalars(
                 select(Store).where(Store.enabled.is_(True), Store.scraper.is_not(None))
             ).all()
-            terms = session.scalars(
-                select(WatchTerm.query).where(WatchTerm.enabled.is_(True))
-            ).all()
+            terms = session.scalars(select(WatchTerm).where(WatchTerm.enabled.is_(True))).all()
 
             lines: list[str] = []
             ok = failed = found = 0
@@ -189,7 +204,8 @@ def run_refresh(
                     lines.append(f"{store.slug}: sin scraper disponible (acceso directo)")
                     continue
                 try:
-                    count, errors = _scrape_store(session, store, scraper, list(terms), settings)
+                    store_terms = [t.query for t in terms if t.vertical == store.vertical]
+                    count, errors = _scrape_store(session, store, scraper, store_terms, settings)
                 except Exception as exc:
                     session.rollback()
                     log.exception("Fallo inesperado en %s", store.slug)

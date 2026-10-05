@@ -43,6 +43,10 @@ class ScrapedItem:
     image_url: str | None = None
     currency: str = "EUR"
     description: str | None = None  # solo para clasificar cuando el título es solo el modelo
+    category: str | None = None  # si la tienda ya la da, tiene prioridad sobre la clasificación
+    # El scraper ya lo ha filtrado (coche rebajado o dentro de presupuesto): no exige descuento
+    # mínimo y, si no trae precio anterior, el refresco lo deduce del historial de precios.
+    curated: bool = False
 
     @property
     def discount_pct(self) -> float:

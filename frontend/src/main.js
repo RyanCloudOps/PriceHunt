@@ -1,5 +1,5 @@
 import "./style.css";
-import { api } from "./api.js";
+import { api, setVertical } from "./api.js";
 import { createSphere } from "./sphere.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -88,6 +88,53 @@ const onScroll = () => sphere.setScroll(Math.min(1.2, window.scrollY / window.in
 window.addEventListener("scroll", onScroll, { passive: true });
 onScroll();
 
+// ---------- modo (tecnología / coches) ----------
+const COPY = {
+  tech: {
+    eyebrow: "Rastreador interno · Todas las ofertas de tus marcas",
+    title1: "CAZAMOS OFERTAS",
+    title2: "DE TUS MARCAS.",
+    sub: "Tú eliges las marcas y PriceHunt busca todas sus ofertas (tecnología, hogar, gaming…) en Amazon, LDLC, MediaMarkt y más tiendas seguras, cada día y de forma automática.",
+    search: "Buscar producto o modelo…",
+    watchPlaceholder: "Añadir marca (p. ej. glorious)",
+    watchSub: "Marcas que se buscan en cada tienda rastreada.",
+    count: (n) => `${n} ofertas activas`,
+  },
+  cars: {
+    eyebrow: "Coches · Rebajas en concesionarios oficiales",
+    title1: "CAZAMOS COCHES",
+    title2: "EN REBAJAS.",
+    sub: "PriceHunt vigila los coches de ocasión rebajados en concesionarios oficiales (Das WeltAuto: SEAT, CUPRA, Škoda…). Las subastas públicas del BOE quedan como acceso directo: su web no permite rastreo automático.",
+    search: "Buscar marca o modelo…",
+    watchPlaceholder: "Añadir marca (p. ej. seat)",
+    watchSub: "Marcas de coche que se buscan en los concesionarios rastreados.",
+    count: (n) => `${n} coches rebajados`,
+  },
+};
+const readMode = () => {
+  try {
+    return localStorage.getItem("ph-mode") === "cars" ? "cars" : "tech";
+  } catch {
+    return "tech";
+  }
+};
+let mode = readMode();
+
+function applyMode() {
+  setVertical(mode);
+  document.body.dataset.mode = mode;
+  const sw = $("#mode");
+  sw.dataset.mode = mode;
+  sw.querySelectorAll("button").forEach((b) =>
+    b.setAttribute("aria-pressed", String(b.dataset.mode === mode)),
+  );
+  document.querySelectorAll("[data-copy]").forEach((el) => {
+    const text = COPY[mode][el.dataset.copy];
+    if (el.dataset.copyAttr) el.setAttribute(el.dataset.copyAttr, text);
+    else el.textContent = text;
+  });
+}
+
 // ---------- estado ----------
 const filters = { q: "", store: "", category: "", sort: "discount", min_discount: 0 };
 let polling = null;
@@ -174,7 +221,7 @@ function dealCard(d, i) {
       <a href="${safeUrl(d.url)}" target="_blank" rel="noopener noreferrer nofollow">
         <div class="deal-media">
           ${media}
-          <span class="badge">−${Math.round(d.discount_pct)}%</span>
+          ${d.discount_pct >= 0.5 ? `<span class="badge">−${Math.round(d.discount_pct)}%</span>` : '<span class="badge sale">Ocasión</span>'}
           ${d.is_new ? '<span class="new">Nueva</span>' : ""}
         </div>
         <div class="deal-body">
@@ -201,7 +248,7 @@ async function loadDeals() {
     const page = await api.deals({ ...filters, limit: 120 });
     grid.innerHTML = page.items.map(dealCard).join("");
     $("#deals-empty").hidden = page.items.length > 0;
-    $("#deals-count").textContent = `${page.total} ofertas activas · se revalidan cada día`;
+    $("#deals-count").textContent = `${COPY[mode].count(page.total)} · se revalidan cada día`;
     observeReveals(grid);
   } catch (e) {
     toast(`No se pudieron cargar las ofertas: ${e.message}`, "error");
@@ -449,7 +496,25 @@ grid.addEventListener(
   true,
 );
 
+$("#mode").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-mode]");
+  if (!btn || btn.dataset.mode === mode) return;
+  mode = btn.dataset.mode;
+  try {
+    localStorage.setItem("ph-mode", mode);
+  } catch {
+    /* sin almacenamiento: el modo solo dura esta sesión */
+  }
+  Object.assign(filters, { q: "", store: "", category: "", min_discount: 0 });
+  $("#f-q").value = "";
+  $("#f-min").value = 0;
+  $("#f-min-val").textContent = "0%";
+  applyMode();
+  loadAll();
+});
+
 // Arranque
+applyMode();
 requestAnimationFrame(() => document.body.classList.add("ready"));
 observeReveals();
 loadAll();

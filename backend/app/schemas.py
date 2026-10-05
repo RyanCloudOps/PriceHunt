@@ -1,8 +1,9 @@
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, PlainSerializer, field_validator
 
+Vertical = Literal["tech", "cars"]
 Money = Annotated[float, PlainSerializer(lambda v: round(float(v), 2), return_type=float)]
 
 
@@ -20,12 +21,14 @@ class StoreOut(ORM):
     accent_color: str
     scraper: str | None
     enabled: bool
+    vertical: str
     active_deals: int = 0
     tracked: bool = False  # True si tiene scraper operativo
 
 
 class StoreIn(BaseModel):
     name: str = Field(min_length=2, max_length=100)
+    vertical: Vertical = "tech"
     shortcut_url: HttpUrl
     search_url: str | None = Field(default=None, max_length=500)
     accent_color: str = Field(default="#f5a524", pattern=r"^#[0-9a-fA-F]{6}$")
@@ -79,10 +82,12 @@ class WatchTermOut(ORM):
     id: int
     query: str
     enabled: bool
+    vertical: str
 
 
 class WatchTermIn(BaseModel):
     query: str = Field(min_length=2, max_length=100, pattern=r"^[\w\s\-]+$")
+    vertical: Vertical = "tech"
 
 
 class CategoryCount(BaseModel):

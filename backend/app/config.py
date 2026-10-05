@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # Scraping
     demo_mode: bool = False  # datos sintéticos, sin tocar webs reales (CI / offline)
     min_discount_pct: float = 5.0
+    # Modo coches: usados baratos que se muestran aunque no estén rebajados
+    car_max_price: int = 10000  # precio máximo en €
+    car_max_km: int = 150000  # kilometraje máximo («medio uso»); 0 = sin límite
     max_pages: int = 60  # tope de páginas por marca y tienda (se para antes si no hay más)
     scrape_delay_seconds: float = 2.0
     http_timeout_seconds: float = 20.0

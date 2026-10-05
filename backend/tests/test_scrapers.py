@@ -11,9 +11,11 @@ from app.scrapers import BlockedError, build_scraper, parse_price
 from app.scrapers.alternate import AlternateScraper
 from app.scrapers.amazon import AmazonPaapiScraper, sigv4_headers
 from app.scrapers.corsair import CATEGORIES, CorsairScraper
+from app.scrapers.dasweltauto import DasWeltAutoScraper
 from app.scrapers.demo import DemoScraper
 from app.scrapers.ldlc import LdlcScraper
 from app.scrapers.mediamarkt import MediaMarktScraper
+from app.scrapers.ocasionplus import OcasionPlusScraper
 from app.services.classify import categorize, matches_brand
 
 
@@ -429,3 +431,120 @@ def test_seed_enables_scrapers_on_existing_stores(db):
     stores = {s.slug: s for s in db.scalars(select(Store))}
     assert stores["alternate"].scraper == "alternate"
     assert stores["corsair"].scraper == "corsair" and "{query}" in stores["corsair"].search_url
+
+
+def _car_card(car_id: str, model: str = "SEAT Ateca 1.0 TSI", price="24840", **vehicle) -> str:
+    cfg = {
+        "VehicleManufacturer": "SEAT",
+        "Model": {"Name": model},
+        "Production": {"Year": "2026"},
+        "Vehicle": {"Milage": "51 km", "Sold": "false", "Reserved": "false", **vehicle},
+        "BodyType": {"Name": "Todo terreno"},
+        "Engine": {"FuelType": {"Main": "Gasolina"}},
+        "Budget": {"Price": {"price": price}},
+    }
+    return (
+        f"<article data-car-id='{car_id}' data-configuration='{json.dumps(cfg)}'>"
+        f'<a class="enlaceficha" href="/esp/oferta/seat-ateca/{car_id}"></a>'
+        '<picture><source data-srcset="https://img.test/a.webp?x=1&amp;size=400 1x, other 2x">'
+        "</picture></article>"
+    )
+
+
+def test_dasweltauto_parse():
+    html = _car_card("1") + _car_card("2", Reserved="true") + _car_card("3", "SEAT X", "0")
+    items = DasWeltAutoScraper.parse(html)
+    assert [i.external_id for i in items] == ["1"]  # reservado y precio 0 fuera
+    car = items[0]
+    assert car.title == "SEAT Ateca 1.0 TSI · 2026 · 51 km · Gasolina"
+    assert car.price == Decimal("24840")
+    assert car.url == "https://www.dasweltauto.es/esp/oferta/seat-ateca/1"
+    assert car.image_url == "https://img.test/a.webp?x=1&size=400"
+    assert car.category == "SUV" and car.curated
+
+
+@respx.mock
+def test_dasweltauto_paginates_and_ignores_other_brands():
+    full = "".join(_car_card(str(i)) for i in range(23))
+    route = respx.get(url__startswith="https://www.dasweltauto.es/esp/coches-seleccion/seat")
+    route.side_effect = [
+        httpx.Response(200, text=full),
+        httpx.Response(200, text=_car_card("99")),  # página corta: última
+    ]
+    scraper = DasWeltAutoScraper(Settings(scrape_delay_seconds=0))
+    assert scraper.search("corsair") == []
+    assert len(scraper.search("seat")) == 24
+    assert route.call_count == 2
+    assert "descuento_desde%5D=1" in str(route.calls[0].request.url)
+
+
+def _op_vehicle(
+    code: str, price: int, brand="Renault", model="Renault Clio 1.0 TCe", **offer
+) -> dict:
+    return {
+        "@type": "Vehicle",
+        "name": "Renault Clio",
+        "brand": {"@type": "Brand", "name": brand},
+        "model": model,
+        "fuelType": "Gasolina",
+        "productionDate": "2019-05-01T00:00:00.000Z",
+        "mileageFromOdometer": {"value": 64500, "unitText": "KM"},
+        "image": "https://img.test/clio.jpg",
+        "offers": {
+            "price": price,
+            "availability": "https://schema.org/InStock",
+            "url": f"https://www.ocasionplus.com/coches-segunda-mano/renault-clio-con-64500km-2019-{code}",
+            **offer,
+        },
+    }
+
+
+def _op_page(*vehicles: dict) -> str:
+    ld = {"@type": "ItemList", "itemListElement": list(vehicles)}
+    return f'<script type="application/ld+json">{json.dumps(ld)}</script>'
+
+
+def test_ocasionplus_parse_keeps_only_in_budget_in_stock():
+    page = _op_page(
+        _op_vehicle("aaa", 8900),
+        _op_vehicle("bbb", 10000),
+        _op_vehicle("ccc", 10001),
+        _op_vehicle("ddd", 5000, availability="https://schema.org/OutOfStock"),
+    )
+    items, listed = OcasionPlusScraper.parse(page, 10000)
+    assert listed == {"aaa", "bbb", "ccc", "ddd"}
+    assert [i.external_id for i in items] == ["aaa", "bbb"]
+    car = items[0]
+    assert car.title == "Renault Clio 1.0 TCe · 2019 · 64.500 km · Gasolina"
+    assert car.category == "Hasta 10.000 €" and car.curated and car.price == Decimal("8900")
+
+
+@respx.mock
+def test_ocasionplus_paginates_until_a_page_adds_nothing_new():
+    route = respx.get(url__startswith="https://www.ocasionplus.com/coches-segunda-mano/renault")
+    route.side_effect = [
+        httpx.Response(200, text=_op_page(_op_vehicle("aaa", 8000))),
+        httpx.Response(200, text=_op_page(_op_vehicle("bbb", 9000))),
+        httpx.Response(200, text=_op_page(_op_vehicle("bbb", 9000))),  # repetida: fin
+    ]
+    scraper = OcasionPlusScraper(Settings(scrape_delay_seconds=0))
+    assert [i.external_id for i in scraper.search("Renault")] == ["aaa", "bbb"]
+    assert route.call_count == 3
+    assert "?page=2" in str(route.calls[1].request.url)
+
+
+@respx.mock
+def test_ocasionplus_unknown_brand_is_empty_not_an_error():
+    respx.get("https://www.ocasionplus.com/coches-segunda-mano/lada").mock(
+        return_value=httpx.Response(404)
+    )
+    assert OcasionPlusScraper(Settings(scrape_delay_seconds=0)).search("lada") == []
+
+
+def test_ocasionplus_max_km_filters_high_mileage_and_zero_means_unlimited():
+    page = _op_page(_op_vehicle("aaa", 8000), _op_vehicle("bbb", 7000))
+    high = json.loads(page.split(">", 1)[1].rsplit("</script>", 1)[0])
+    high["itemListElement"][1]["mileageFromOdometer"]["value"] = 210000
+    page = f'<script type="application/ld+json">{json.dumps(high)}</script>'
+    assert [i.external_id for i in OcasionPlusScraper.parse(page, 10000, 150000)[0]] == ["aaa"]
+    assert len(OcasionPlusScraper.parse(page, 10000, 0)[0]) == 2

@@ -71,6 +71,56 @@ DEFAULT_STORES = [
 
 DEFAULT_TERMS = ["corsair", "logitech", "razer", "steelseries", "hyperx"]
 
+CAR_STORES = [
+    {
+        "slug": "dasweltauto",
+        "name": "Das WeltAuto",
+        "base_url": "https://www.dasweltauto.es",
+        "shortcut_url": "https://www.dasweltauto.es/esp/coches-oportunidad",
+        "search_url": "https://www.dasweltauto.es/esp/coches-seleccion/{query}",
+        "accent_color": "#00a1e0",
+        "scraper": "dasweltauto",
+        "vertical": "cars",
+    },
+    {
+        "slug": "ocasionplus",
+        "name": "OcasionPlus",
+        "base_url": "https://www.ocasionplus.com",
+        "shortcut_url": "https://www.ocasionplus.com/coches-segunda-mano",
+        "search_url": "https://www.ocasionplus.com/coches-segunda-mano/{query}",
+        "accent_color": "#0b8f5a",
+        "scraper": "ocasionplus",
+        "vertical": "cars",
+    },
+    {
+        # robots.txt del portal: Disallow / para todos los bots, así que solo es un acceso directo
+        "slug": "subastas-boe",
+        "name": "Subastas BOE (vehículos)",
+        "base_url": "https://subastas.boe.es",
+        "shortcut_url": "https://subastas.boe.es/",
+        "search_url": None,
+        "accent_color": "#8a1c1c",
+        "scraper": None,
+        "vertical": "cars",
+    },
+]
+
+CAR_TERMS = ["seat", "cupra", "skoda", "volkswagen", "audi"]
+# Marcas con muchos coches de ocasión baratos (OcasionPlus)
+CAR_TERMS_BUDGET = [
+    "toyota",
+    "renault",
+    "dacia",
+    "citroen",
+    "peugeot",
+    "opel",
+    "ford",
+    "fiat",
+    "kia",
+    "hyundai",
+    "nissan",
+]
+
 
 def seed_defaults(session: Session) -> None:
     """Idempotente: solo inserta si las tablas están vacías."""
@@ -80,7 +130,21 @@ def seed_defaults(session: Session) -> None:
         _enable_new_scrapers(session)
     if not session.scalar(select(func.count()).select_from(WatchTerm)):
         session.add_all(WatchTerm(query=q) for q in DEFAULT_TERMS)
+    _add_car_defaults(session)
     session.commit()
+
+
+def _add_car_defaults(session: Session) -> None:
+    """Bases de datos anteriores al modo coches: añade sus tiendas y marcas una sola vez."""
+    slugs = set(session.scalars(select(Store.slug)))
+    session.add_all(Store(**data) for data in CAR_STORES if data["slug"] not in slugs)
+    # Solo la primera vez que se añade cada tienda: si el usuario borra marcas, no reaparecen
+    queries = set(session.scalars(select(WatchTerm.query)))
+    wanted = [
+        *(CAR_TERMS if "dasweltauto" not in slugs else []),
+        *(CAR_TERMS_BUDGET if "ocasionplus" not in slugs else []),
+    ]
+    session.add_all(WatchTerm(query=q, vertical="cars") for q in wanted if q not in queries)
 
 
 def _enable_new_scrapers(session: Session) -> None:

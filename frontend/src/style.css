@@ -1146,3 +1146,92 @@ select:focus-visible,
     display: none;
   }
 }
+
+/* ---------- interruptor Tecnología / Coches ---------- */
+.mode {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.mode button {
+  position: relative;
+  z-index: 1;
+  padding: 7px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-2);
+  font: 700 12px var(--font);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: color 0.3s var(--ease);
+}
+
+.mode button[aria-pressed="true"] {
+  color: #fff;
+}
+
+.mode button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.mode-thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(50% - 4px);
+  border-radius: 999px;
+  background: var(--ink);
+  transition: transform 0.4s var(--ease);
+}
+
+.mode[data-mode="cars"] .mode-thumb {
+  transform: translateX(100%);
+}
+
+body[data-mode="cars"] {
+  --amber: #5ab0ff;
+  --amber-deep: #1479d4;
+  --amber-glow: rgba(90, 176, 255, 0.55);
+}
+
+.badge.sale {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+@media (max-width: 520px) {
+  .nav {
+    gap: 12px;
+  }
+
+  .brand {
+    font-size: 12px;
+  }
+
+  .mode button {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  .status-pill #status-text {
+    max-width: 90px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-thumb,
+  .mode button {
+    transition: none;
+  }
+}

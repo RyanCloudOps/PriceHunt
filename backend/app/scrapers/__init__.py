@@ -4,9 +4,11 @@ from app.scrapers.alternate import AlternateScraper
 from app.scrapers.amazon import AmazonPaapiScraper
 from app.scrapers.base import BlockedError, ScrapedItem, Scraper, ScraperError, parse_price
 from app.scrapers.corsair import CorsairScraper
+from app.scrapers.dasweltauto import DasWeltAutoScraper
 from app.scrapers.demo import DemoScraper
 from app.scrapers.ldlc import LdlcScraper
 from app.scrapers.mediamarkt import MediaMarktScraper
+from app.scrapers.ocasionplus import OcasionPlusScraper
 
 REGISTRY: dict[str, type[Scraper]] = {
     cls.key: cls
@@ -14,8 +16,10 @@ REGISTRY: dict[str, type[Scraper]] = {
         AlternateScraper,
         AmazonPaapiScraper,
         CorsairScraper,
+        DasWeltAutoScraper,
         LdlcScraper,
         MediaMarktScraper,
+        OcasionPlusScraper,
     )
 }
 

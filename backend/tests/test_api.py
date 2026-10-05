@@ -105,3 +105,33 @@ def test_manual_refresh_endpoint(client, monkeypatch):
     assert calls == ["manual"]
     monkeypatch.setattr(refresh, "start_in_background", lambda trigger: False)
     assert client.post("/api/refresh").status_code == 409
+
+
+def test_verticals_are_separated(client):
+    seed_demo()
+    tech = client.get("/api/deals?limit=200").json()
+    cars = client.get("/api/deals?vertical=cars&limit=200").json()
+    assert tech["total"] > 0 and cars["total"] > 0
+    assert {d["store_slug"] for d in cars["items"]} <= {"dasweltauto", "ocasionplus"}
+    assert "dasweltauto" not in {d["store_slug"] for d in tech["items"]}
+    assert {c["name"] for c in client.get("/api/categories?vertical=cars").json()} <= {
+        "SUV",
+        "Compacto",
+        "Utilitario",
+        "Familiar",
+    }
+    assert {s["slug"] for s in client.get("/api/stores?vertical=cars").json()} == {
+        "dasweltauto",
+        "ocasionplus",
+        "subastas-boe",
+    }
+    terms = {t["query"] for t in client.get("/api/watchlist?vertical=cars").json()}
+    assert {"seat", "cupra"} <= terms and "corsair" not in terms
+    assert client.get("/api/stats?vertical=cars").json()["active_deals"] == cars["total"]
+    assert client.get("/api/deals?vertical=boats").status_code == 422
+
+
+def test_watch_term_keeps_its_vertical(client):
+    resp = client.post("/api/watchlist", json={"query": "mazda", "vertical": "cars"})
+    assert resp.status_code == 201 and resp.json()["vertical"] == "cars"
+    assert "mazda" not in {t["query"] for t in client.get("/api/watchlist").json()}

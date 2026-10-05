@@ -136,7 +136,7 @@ def test_demo_mode_end_to_end(db):
     run_id = run_refresh("manual", settings=Settings(demo_mode=True, scrape_delay_seconds=0))
     run = db.get(ScrapeRun, run_id)
     assert run.status == "success"
-    assert run.stores_ok == 5  # amazon, ldlc, mediamarkt, alternate, corsair
+    assert run.stores_ok == 7  # amazon, ldlc, mediamarkt, alternate, corsair, + 2 de coches
     assert run.deals_found > 0
 
 
@@ -150,3 +150,78 @@ def test_store_without_scraper_hides_old_deals(db):
     run_refresh("manual", scraper_factory=lambda store, s: None, settings=SETTINGS)
     db.expire_all()
     assert not db.scalar(select(Deal).where(Deal.store_id == amazon.id, Deal.is_active.is_(True)))
+
+
+def car_store(db) -> Store:
+    store = db.scalar(select(Store).where(Store.slug == "dasweltauto"))
+    assert store.vertical == "cars"
+    return store
+
+
+def test_cars_only_use_car_terms_and_car_stores(db):
+    db.query(WatchTerm).delete()
+    db.add_all([WatchTerm(query="corsair"), WatchTerm(query="seat", vertical="cars")])
+    db.commit()
+    asked: dict[str, list[str]] = {}
+
+    class Spy(FakeScraper):
+        def __init__(self, slug):
+            super().__init__({})
+            self.slug = slug
+
+        def search(self, query):
+            asked.setdefault(self.slug, []).append(query)
+            return []
+
+    run_refresh(
+        "manual",
+        scraper_factory=lambda s, _: Spy(s.slug) if s.slug in ("ldlc", "dasweltauto") else None,
+        settings=SETTINGS,
+    )
+    assert asked == {"ldlc": ["corsair"], "dasweltauto": ["seat"]}
+
+
+def test_curated_car_without_original_price_uses_price_history(db):
+    car_store(db)
+    db.query(WatchTerm).delete()
+    db.add(WatchTerm(query="seat", vertical="cars"))
+    db.commit()
+
+    def sale(price: str) -> ScrapedItem:
+        it = item("c1", "SEAT Ateca 1.0 TSI", price)
+        it.curated, it.category = True, "SUV"
+        return it
+
+    def factory(store, _s):
+        return FakeScraper({"seat": [sale(prices.pop(0))]}) if store.slug == "dasweltauto" else None
+
+    prices = ["24900", "23900"]
+    for _ in prices[:]:
+        run_refresh("manual", scraper_factory=factory, settings=SETTINGS)
+        db.expire_all()
+        deal = db.scalar(select(Deal).where(Deal.external_id == "c1"))
+        if deal.price == Decimal("24900"):
+            # primera vez: marcado como rebajado pero sin referencia → se muestra sin %
+            assert deal.is_active and deal.discount_pct == 0 and deal.original_price is None
+    assert deal.category == "SUV"
+    assert deal.original_price == Decimal("24900.00")
+    assert deal.discount_pct == 4.0
+
+
+def test_seed_adds_budget_car_terms_once_without_resurrecting_deleted_ones(db):
+    from app.services.seed import CAR_TERMS_BUDGET, seed_defaults
+
+    # Base de datos de la versión anterior: con Das WeltAuto pero sin OcasionPlus
+    db.delete(db.scalar(select(Store).where(Store.slug == "ocasionplus")))
+    db.query(WatchTerm).filter(WatchTerm.query.in_([*CAR_TERMS_BUDGET, "cupra"])).delete()
+    db.commit()
+
+    seed_defaults(db)
+    terms = set(db.scalars(select(WatchTerm.query).where(WatchTerm.vertical == "cars")))
+    assert set(CAR_TERMS_BUDGET) <= terms
+    assert "cupra" not in terms  # la borró el usuario: no vuelve
+
+    db.query(WatchTerm).filter(WatchTerm.query == "toyota").delete()
+    db.commit()
+    seed_defaults(db)  # OcasionPlus ya existe: no se vuelven a añadir
+    assert "toyota" not in set(db.scalars(select(WatchTerm.query)))

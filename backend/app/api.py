@@ -27,6 +27,7 @@ from app.services import refresh
 
 router = APIRouter(prefix="/api")
 
+VerticalParam = Literal["tech", "cars"]
 SortKey = Literal["discount", "price_asc", "price_desc", "newest"]
 _SORTS = {
     "discount": Deal.discount_pct.desc(),
@@ -68,6 +69,7 @@ def health(session: Session = Depends(get_session)) -> dict:
 @router.get("/deals", response_model=DealPage)
 def list_deals(
     session: Session = Depends(get_session),
+    vertical: VerticalParam = "tech",
     store: str | None = None,
     category: str | None = None,
     brand: str | None = None,
@@ -78,7 +80,7 @@ def list_deals(
     limit: int = Query(default=60, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> DealPage:
-    stmt = select(Deal).join(Store)
+    stmt = select(Deal).join(Store).where(Store.vertical == vertical)
     if not include_inactive:
         stmt = stmt.where(Deal.is_active.is_(True))
     if store:
@@ -109,10 +111,13 @@ def deal_history(deal_id: int, session: Session = Depends(get_session)) -> list[
 
 
 @router.get("/categories", response_model=list[CategoryCount])
-def categories(session: Session = Depends(get_session)) -> list[CategoryCount]:
+def categories(
+    vertical: VerticalParam = "tech", session: Session = Depends(get_session)
+) -> list[CategoryCount]:
     rows = session.execute(
         select(Deal.category, func.count())
-        .where(Deal.is_active.is_(True))
+        .join(Store)
+        .where(Deal.is_active.is_(True), Store.vertical == vertical)
         .group_by(Deal.category)
         .order_by(func.count().desc())
     )
@@ -120,7 +125,9 @@ def categories(session: Session = Depends(get_session)) -> list[CategoryCount]:
 
 
 @router.get("/stores", response_model=list[StoreOut])
-def list_stores(session: Session = Depends(get_session)) -> list[StoreOut]:
+def list_stores(
+    vertical: VerticalParam = "tech", session: Session = Depends(get_session)
+) -> list[StoreOut]:
     counts = dict(
         session.execute(
             select(Deal.store_id, func.count())
@@ -128,7 +135,9 @@ def list_stores(session: Session = Depends(get_session)) -> list[StoreOut]:
             .group_by(Deal.store_id)
         ).all()
     )
-    stores = session.scalars(select(Store).order_by(Store.id)).all()
+    stores = session.scalars(
+        select(Store).where(Store.vertical == vertical).order_by(Store.id)
+    ).all()
     out = []
     for s in stores:
         item = StoreOut.model_validate(s)
@@ -152,6 +161,7 @@ def create_store(payload: StoreIn, session: Session = Depends(get_session)) -> S
         search_url=payload.search_url,
         accent_color=payload.accent_color,
         scraper=None,
+        vertical=payload.vertical,
     )
     session.add(store)
     session.commit()
@@ -171,8 +181,12 @@ def delete_store(store_id: int, session: Session = Depends(get_session)) -> Resp
 
 
 @router.get("/watchlist", response_model=list[WatchTermOut])
-def list_terms(session: Session = Depends(get_session)) -> list[WatchTerm]:
-    return session.scalars(select(WatchTerm).order_by(WatchTerm.id)).all()
+def list_terms(
+    vertical: VerticalParam = "tech", session: Session = Depends(get_session)
+) -> list[WatchTerm]:
+    return session.scalars(
+        select(WatchTerm).where(WatchTerm.vertical == vertical).order_by(WatchTerm.id)
+    ).all()
 
 
 @router.post("/watchlist", response_model=WatchTermOut, status_code=status.HTTP_201_CREATED)
@@ -180,7 +194,7 @@ def add_term(payload: WatchTermIn, session: Session = Depends(get_session)) -> W
     query = payload.query.strip().lower()
     if session.scalar(select(WatchTerm).where(WatchTerm.query == query)):
         raise HTTPException(status.HTTP_409_CONFLICT, "Ya se está vigilando")
-    term = WatchTerm(query=query)
+    term = WatchTerm(query=query, vertical=payload.vertical)
     session.add(term)
     session.commit()
     return term
@@ -211,22 +225,25 @@ def trigger_refresh() -> dict:
 
 
 @router.get("/stats", response_model=Stats)
-def stats(session: Session = Depends(get_session)) -> Stats:
+def stats(vertical: VerticalParam = "tech", session: Session = Depends(get_session)) -> Stats:
     active = Deal.is_active.is_(True)
+    in_vertical = Deal.store_id.in_(select(Store.id).where(Store.vertical == vertical))
     count, best, avg, savings = session.execute(
         select(
             func.count(Deal.id),
             func.coalesce(func.max(Deal.discount_pct), 0),
             func.coalesce(func.avg(Deal.discount_pct), 0),
             func.coalesce(func.sum(Deal.original_price - Deal.price), 0),
-        ).where(active)
+        ).where(active, in_vertical)
     ).one()
     new_today = session.scalar(
         select(func.count(Deal.id)).where(
-            active, Deal.first_seen_at >= utcnow() - timedelta(days=1)
+            active, in_vertical, Deal.first_seen_at >= utcnow() - timedelta(days=1)
         )
     )
-    stores = session.scalars(select(Store).where(Store.enabled.is_(True))).all()
+    stores = session.scalars(
+        select(Store).where(Store.enabled.is_(True), Store.vertical == vertical)
+    ).all()
     last = session.scalar(select(ScrapeRun).order_by(ScrapeRun.id.desc()).limit(1))
     return Stats(
         active_deals=count,

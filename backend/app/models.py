@@ -30,6 +30,7 @@ class Store(Base):
     search_url: Mapped[str | None] = mapped_column(String(500))  # plantilla con {query}
     accent_color: Mapped[str] = mapped_column(String(9), default="#f5a524")
     scraper: Mapped[str | None] = mapped_column(String(50))
+    vertical: Mapped[str] = mapped_column(String(10), default="tech", server_default="tech")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -43,6 +44,7 @@ class WatchTerm(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     query: Mapped[str] = mapped_column(String(100), unique=True)
+    vertical: Mapped[str] = mapped_column(String(10), default="tech", server_default="tech")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
