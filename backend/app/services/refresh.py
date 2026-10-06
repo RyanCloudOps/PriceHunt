@@ -10,6 +10,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
 from sqlalchemy import func, select, update
@@ -142,6 +143,44 @@ def _scrape_store(
     return len(seen), errors
 
 
+def _refresh_store(
+    session_factory: sessionmaker,
+    store_id: int,
+    scraper_factory: ScraperFactory,
+    terms_by_vertical: dict[str, list[str]],
+    settings: Settings,
+) -> tuple[int, list[str], str]:
+    """Refresca una tienda con su propia sesión (se ejecuta en un hilo).
+
+    Devuelve (ofertas, líneas de log, estado: "ok" | "failed" | "skipped").
+    """
+    with session_factory() as session:
+        store = session.get(Store, store_id)
+        scraper = scraper_factory(store, settings)
+        if scraper is None:
+            # Sin forma de revalidar (p. ej. faltan credenciales): no mostramos ofertas viejas
+            session.execute(
+                update(Deal)
+                .where(Deal.store_id == store.id, Deal.is_active.is_(True))
+                .values(is_active=False)
+            )
+            session.commit()
+            return 0, [f"{store.slug}: sin scraper disponible (acceso directo)"], "skipped"
+        try:
+            count, errors = _scrape_store(
+                session, store, scraper, terms_by_vertical.get(store.vertical, []), settings
+            )
+        except Exception as exc:
+            session.rollback()
+            log.exception("Fallo inesperado en %s", store.slug)
+            count, errors = 0, [f"{store.slug}: {exc!r}"]
+        finally:
+            scraper.close()
+        lines = [f"{store.slug}: {count} ofertas"]
+        lines.extend(f"  ! {e}" for e in errors)
+        return count, lines, "failed" if errors and count == 0 else "ok"
+
+
 def expire_stale_deals(session: Session, settings: Settings) -> int:
     """Red de seguridad: lo que no se ha revalidado en 2 intervalos deja de mostrarse."""
     cutoff = utcnow() - timedelta(hours=settings.refresh_interval_hours * 2)
@@ -189,35 +228,35 @@ def run_refresh(
             ).all()
             terms = session.scalars(select(WatchTerm).where(WatchTerm.enabled.is_(True))).all()
 
+            terms_by_vertical: dict[str, list[str]] = {}
+            for t in terms:
+                terms_by_vertical.setdefault(t.vertical, []).append(t.query)
+
+            # Cada tienda es un host distinto y conserva su propio límite de peticiones,
+            # así que se recorren en paralelo sin cargar más a ninguna.
+            store_ids = [s.id for s in stores]
+            with ThreadPoolExecutor(max_workers=max(1, len(store_ids))) as pool:
+                futures = [
+                    pool.submit(
+                        _refresh_store,
+                        session_factory,
+                        sid,
+                        scraper_factory,
+                        terms_by_vertical,
+                        settings,
+                    )
+                    for sid in store_ids
+                ]
+                results = [f.result() for f in futures]
+
             lines: list[str] = []
             ok = failed = found = 0
-            for store in stores:
-                scraper = scraper_factory(store, settings)
-                if scraper is None:
-                    # Sin forma de revalidar (p. ej. faltan credenciales): no mostramos ofertas viejas
-                    session.execute(
-                        update(Deal)
-                        .where(Deal.store_id == store.id, Deal.is_active.is_(True))
-                        .values(is_active=False)
-                    )
-                    session.commit()
-                    lines.append(f"{store.slug}: sin scraper disponible (acceso directo)")
-                    continue
-                try:
-                    store_terms = [t.query for t in terms if t.vertical == store.vertical]
-                    count, errors = _scrape_store(session, store, scraper, store_terms, settings)
-                except Exception as exc:
-                    session.rollback()
-                    log.exception("Fallo inesperado en %s", store.slug)
-                    count, errors = 0, [f"{store.slug}: {exc!r}"]
-                finally:
-                    scraper.close()
+            for count, store_lines, status in results:
                 found += count
-                lines.append(f"{store.slug}: {count} ofertas")
-                lines.extend(f"  ! {e}" for e in errors)
-                if errors and count == 0:
+                lines.extend(store_lines)
+                if status == "failed":
                     failed += 1
-                else:
+                elif status == "ok":
                     ok += 1
 
             expired = expire_stale_deals(session, settings)

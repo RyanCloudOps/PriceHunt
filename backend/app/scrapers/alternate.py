@@ -4,15 +4,19 @@ from bs4 import BeautifulSoup
 
 from app.scrapers.base import ScrapedItem, Scraper, parse_price
 
+# Páginas seguidas sin ninguna oferta tras las cuales se deja de paginar
+BARREN_PAGES_LIMIT = 3
+
 
 class AlternateScraper(Scraper):
     key = "alternate"
     base = "https://www.alternate.es"
 
     def search(self, query: str) -> list[ScrapedItem]:
-        # 24 productos por página; se para cuando una página ya no aporta nada nuevo
+        # 24 productos por página; se para cuando ya no hay más o dejan de salir ofertas
         items: list[ScrapedItem] = []
         seen: set[str] = set()
+        barren = 0
         for page in range(1, self.settings.max_pages + 1):
             suffix = f"&page={page}" if page > 1 else ""
             html = self.fetch(f"{self.base}/listing.xhtml?q={quote_plus(query)}{suffix}")
@@ -21,6 +25,15 @@ class AlternateScraper(Scraper):
                 break
             seen.update(i.external_id for i in batch)
             items.extend(batch)
+            # El listado no está ordenado por descuento: varias páginas seguidas sin
+            # una sola oferta indican que el resto tampoco aporta.
+            barren = (
+                0
+                if any(i.discount_pct >= self.settings.min_discount_pct for i in batch)
+                else barren + 1
+            )
+            if barren >= BARREN_PAGES_LIMIT:
+                break
         return items
 
     @classmethod

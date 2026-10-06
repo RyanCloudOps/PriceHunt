@@ -1,6 +1,6 @@
 # Notas de sesión: dónde nos quedamos
 
-Última actualización: 2026-10-06
+Última actualización: 2026-10-06 (tarde)
 
 ## Qué estamos haciendo
 
@@ -23,12 +23,13 @@ Desarrollar **PriceHunt** (repo `RyanCloudOps/PriceHunt`) en WSL2 Debian 13. Tra
   - Marcas de coches vigiladas (16): seat, cupra, skoda, volkswagen, audi + toyota, renault, dacia, citroen, peugeot, opel, ford, fiat, kia, hyundai, nissan. El seed solo las añade la primera vez que aparece cada tienda (si se borran, no vuelven).
   - Demo con coches incluido.
 - Última prueba real: 351 coches (335 OcasionPlus, 16 Das WeltAuto), ninguno por encima de 10.000 € ni 150.000 km en OcasionPlus. Tecnología sin cambios (~270 ofertas).
+- **Refresco más rápido** (`services/refresh.py`): las tiendas se scrapean en paralelo, un hilo y una sesión de BD por tienda (`_refresh_store`). Cada tienda es un host distinto y mantiene su límite de 2 s entre peticiones. Alternate deja de paginar tras 3 páginas seguidas sin ofertas (`BARREN_PAGES_LIMIT`). Tiempo medido: ~7 min frente a ~13,6 min (cuello de botella ahora: OcasionPlus, 16 marcas × 15 páginas × 2 s). Resultado: 612 ofertas frente a 650 antes (tecnología 275 vs 298, coches 337 vs 352); no se ha comprobado cuánto es por el corte de paginación de Alternate y cuánto variación normal de las webs.
 - Tests: 89 pasan; `ruff check` y `ruff format --check` limpios.
 
 ## Estado al cerrar
 
-- Stack Docker apagado con `make down`; los datos de PostgreSQL se conservan en el volumen.
-- Para retomar: abrir Docker Desktop, `make up` y, si hace falta refrescar, `curl -X POST localhost:8000/api/refresh`. Un refresco real completo tarda ~12 min (2 s entre peticiones y 16 marcas de coches × 15 páginas). La web está en http://localhost:8080 y la API en http://localhost:8000/docs (las rutas llevan prefijo `/api`).
+- Stack Docker apagado con `make down`; los datos de PostgreSQL se conservan en el volumen. Un refresco completo tarda ahora ~7 min.
+- Para retomar: abrir Docker Desktop, `make up` y, si hace falta refrescar, `curl -X POST localhost:8000/api/refresh`. Un refresco real completo tarda ~7 min (tiendas en paralelo; 2 s entre peticiones por tienda). La web está en http://localhost:8080 y la API en http://localhost:8000/docs (las rutas llevan prefijo `/api`).
 - El interruptor y los textos del modo coches solo se han comprobado con la API y el HTML servido, **no visualmente en el navegador**.
 
 ## Límites conocidos
@@ -43,6 +44,8 @@ Desarrollar **PriceHunt** (repo `RyanCloudOps/PriceHunt`) en WSL2 Debian 13. Tra
 - OcasionPlus: solo se miran 300 coches por marca (15 páginas), sin orden por precio, así que puede haber baratos que no se vean.
 
 ## Ideas para mañana
+
+0. **Coches, marcas oficiales** (sondeado, nada implementado): Das WeltAuto devuelve 0 para VW y Audi, investigar si es fallo del scraper. Toyota Plus (`toyota.es/coches-segunda-mano`) no trae los coches en el HTML: los carga un componente JS desde `usc-webcomponents.toyota-europe.com` / `used-car-publisher.toyota-europe.com`; comprobar el `robots.txt` de esos hosts antes de usarlos. Audi.es da 403. Kia, Renault y Nissan sin mirar a fondo.
 
 1. Comprobar visualmente el interruptor Tecnología / Coches en el navegador (móvil incluido).
 2. Coches: más fuentes que permitan rastreo (revisar siempre `robots.txt`), o filtros por km/año en la web.
